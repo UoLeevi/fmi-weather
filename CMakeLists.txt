@@ -7,6 +7,7 @@ if(WIN32)
 endif()
 
 set(CMAKE_PREFIX_PATH "../libuo")
+set(CMAKE_C_FLAGS -pthread)
 
 add_executable("${CMAKE_PROJECT_NAME}"
     src/fmi_client.c
