@@ -19,7 +19,7 @@
 #define FMI_HOSTNAME "data.fmi.fi"
 #define FMI_ENDPOINT_WEATHER \
     "?request=getFeature&" \
-    "storedquery_id=fmi::forecast::hirlam::surface::point::multipointcoverage&" \
+    "storedquery_id=fmi::forecast::harmonie::surface::point::multipointcoverage&" \
     "timestep=60&" \
     "parameters=temperature,WeatherSymbol3&" \
     "place="
