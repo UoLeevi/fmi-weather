@@ -9,6 +9,8 @@ extern "C" {
 #include <time.h>
 
 typedef struct fmi_weather_t {
+    double latitude;
+    double longitude;
     struct tm utc;
     double celsius;
     uint8_t weather_symbol;

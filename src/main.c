@@ -44,6 +44,11 @@ void send_weather_data(
         char result[0x1000] = { 0 };
         char *p = result;
         fmi_weather_t *w = weather;
+
+        p += snprintf(p, sizeof result - (p - result), "%lf,%lf\r\n",
+            w->latitude,
+            w->longitude);
+
         for (int i = 0; i < 24; ++i)
         {
             p += snprintf(p, sizeof result - (p - result), "%d-%02d-%02dT%02d:00:00Z,%.1lf,%d\r\n",
@@ -94,9 +99,17 @@ void *serve(
             end = strstr(buf, "\r\n");
         }
 
-        const size_t place_len = end - buf;
+        char *token = strtok(buf, " ");
+        
+        switch (token[0])
+        {
+            case 'W':
+                token = strtok(NULL, "\0");
+        }
+
+        const size_t place_len = end - token;
         char *place = malloc(place_len);
-        memcpy(place, buf, place_len);
+        memcpy(place, token, place_len);
 
         fmi_client_get_current_weather(fmi_client, place, place_len, send_weather_data, client_sockfd);
     }

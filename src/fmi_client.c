@@ -24,6 +24,7 @@
     "parameters=temperature,WeatherSymbol3&" \
     "place="
 
+#define GML_POS_TAG "<gml:pos>"
 #define GML_BEGINPOSITION_TAG "<gml:beginPosition>"
 #define GML_DOUBLEORNILLREASONTUPLELIST_TAG "<gml:doubleOrNilReasonTupleList>"
 
@@ -37,6 +38,13 @@ void *handle_response_get_current_weather(
     void *state) 
 {
     if (!http_response) {
+        return NULL;
+    }
+
+    char *gml_pos = strstr(http_response->body, GML_POS_TAG);
+
+    if (!gml_pos) {
+        uo_http_res_destroy(http_response);
         return NULL;
     }
 
@@ -55,6 +63,14 @@ void *handle_response_get_current_weather(
     }
 
     fmi_weather_t *weather = calloc(24, sizeof(fmi_weather_t));
+
+    if (sscanf(gml_pos + STRLEN(GML_POS_TAG), "%lf %lf", 
+        &weather->latitude, 
+        &weather->longitude) != 2) {
+        free(weather);
+        uo_http_res_destroy(http_response);
+        return NULL;
+    }
 
     if (sscanf(gml_beginTime + STRLEN(GML_BEGINPOSITION_TAG), "%d-%d-%dT%d:%d:%dZ", 
         &weather->utc.tm_year,
