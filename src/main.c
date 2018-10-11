@@ -25,8 +25,7 @@ void handle_signal(
 	is_closing = true;
 	close(server_sockfd);
 
-	//signal(sig, SIG_DFL);
-  	//raise(sig);
+	signal(sig, SIG_DFL);
 }
 
 void send_weather_data(
@@ -36,6 +35,7 @@ void send_weather_data(
     const char 
         closing_msg[] = "CLOSING\r\n",
         error_msg[] = "ERROR\r\n";
+
     int *client_sockfd = state;
 
     if (!weather) {
@@ -83,18 +83,31 @@ void *serve(
 
     const char ready_msg[] = "READY\r\n";
 
-    while (!is_closing) {
+    while (!is_closing) 
+    {
         int *client_sockfd = uo_queue_dequeue(conn_queue, true);
         
-        send(*client_sockfd, ready_msg, sizeof ready_msg - 1, 0);
+        if (send(*client_sockfd, ready_msg, sizeof ready_msg - 1, 0) == -1) 
+        {
+            close(*client_sockfd);
+            free(client_sockfd);
+            continue;
+        }
         
         ssize_t len = 0;
         char *end = NULL;
         char *p = buf;
-        while (!end) {
+        while (!end) 
+        {
             p += len = recv(*client_sockfd, p, sizeof buf - (p - buf), 0);
+
             if (len == -1)
-                break; //error TODO: handle
+            {
+                close(*client_sockfd);
+                free(client_sockfd);
+                goto continue_outer;
+            }
+
             *p = '\0';
             end = strstr(buf, "\r\n");
         }
@@ -112,6 +125,8 @@ void *serve(
         memcpy(place, token, place_len);
 
         fmi_client_get_current_weather(fmi_client, place, place_len, send_weather_data, client_sockfd);
+
+continue_outer:;
     }
 }
 
@@ -121,8 +136,16 @@ int main(
 {
     fmiw_conf_t *fmiw_conf = fmiw_conf_create();
     if (!fmiw_conf)
-        // error in configuration
+    {
+        printf("Error reading the configuration.\r\n");
         return 1;
+    }
+
+    if (!uo_sock_init())
+    {
+        printf("Error initializing uo_sock.\r\n");
+        return 1;
+    }
 
     fmi_client_configure(fmiw_conf->fmi_apikey);
 
@@ -131,7 +154,6 @@ int main(
     pthread_t thrd;
     pthread_create(&thrd, NULL, serve, conn_queue);
 
-    uo_sock_init();
     /*	Start listening socket that will accept and queue new connections
 
         The socket is blocking dual-stack socket that will listen port that was set in configuration file. */
@@ -144,9 +166,16 @@ int main(
 	
 	{
 		int opt_IPV6_V6ONLY = false;
-		setsockopt(server_sockfd, IPPROTO_IPV6, IPV6_V6ONLY, &opt_IPV6_V6ONLY, sizeof opt_IPV6_V6ONLY);
+		uo_setsockopt(server_sockfd, IPPROTO_IPV6, IPV6_V6ONLY, &opt_IPV6_V6ONLY, sizeof opt_IPV6_V6ONLY);
+
 		int opt_TCP_NODELAY = true;
-		setsockopt(server_sockfd, IPPROTO_TCP, TCP_NODELAY, &opt_TCP_NODELAY, sizeof opt_TCP_NODELAY);
+		uo_setsockopt(server_sockfd, IPPROTO_TCP, TCP_NODELAY, &opt_TCP_NODELAY, sizeof opt_TCP_NODELAY);
+
+        struct timeval opt_SO_RCVTIMEO = { .tv_sec = 20 };
+		uo_setsockopt(server_sockfd, IPPROTO_IPV6, SO_RCVTIMEO, &opt_SO_RCVTIMEO, sizeof opt_SO_RCVTIMEO);
+
+        struct timeval opt_SO_SNDTIMEO = { .tv_sec = 20 };
+        uo_setsockopt(server_sockfd, IPPROTO_IPV6, SO_SNDTIMEO, &opt_SO_SNDTIMEO, sizeof opt_SO_SNDTIMEO);
 
 		struct sockaddr_in6 addr = {
 			.sin6_family = AF_INET6,
