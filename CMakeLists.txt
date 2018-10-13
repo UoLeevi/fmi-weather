@@ -20,6 +20,7 @@ target_include_directories("${CMAKE_PROJECT_NAME}"
         ../libuo/uo_hashtbl/include
         ../libuo/uo_queue/include
         ../libuo/uo_cb/include
+        ../libuo/uo_err/include
         ../libuo/uo_httpc/include
         ../libuo/uo_sock/include)
 
@@ -35,6 +36,10 @@ find_library(LIBUO_CB
     NAMES uo_cb
     HINTS "${CMAKE_PREFIX_PATH}/uo_cb/lib")
 
+find_library(LIBUO_ERR
+    NAMES uo_err
+    HINTS "${CMAKE_PREFIX_PATH}/uo_err/lib")
+
 find_library(LIBUO_HTTPC 
     NAMES uo_httpc
     HINTS "${CMAKE_PREFIX_PATH}/uo_httpc/lib")
@@ -49,7 +54,8 @@ target_link_libraries("${CMAKE_PROJECT_NAME}"
         "${LIBUO_CB}"
         "${LIBUO_HASHTBL}"
         "${LIBUO_QUEUE}"
-        "${LIBUO_SOCK}")
+        "${LIBUO_SOCK}"
+        "${LIBUO_ERR}")
 
 if(WIN32)
     target_link_libraries("${CMAKE_PROJECT_NAME}"
