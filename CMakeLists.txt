@@ -3,7 +3,7 @@ project(fmi-weather)
 
 if(WIN32)
     set(CMAKE_FIND_LIBRARY_PREFIXES "" "lib")
-    set(CMAKE_FIND_LIBRARY_SUFFIXES ".so" ".a" ".dll.a")
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".so" ".lib" ".a" ".dll.a")
 endif()
 
 set(CMAKE_PREFIX_PATH "../libuo")
@@ -14,6 +14,8 @@ add_executable("${CMAKE_PROJECT_NAME}"
     src/fmiw_conf.c
     src/main.c)
 
+find_package(OpenSSL)
+
 target_include_directories("${CMAKE_PROJECT_NAME}"
     PRIVATE
         src
@@ -22,7 +24,8 @@ target_include_directories("${CMAKE_PROJECT_NAME}"
         ../libuo/uo_cb/include
         ../libuo/uo_err/include
         ../libuo/uo_httpc/include
-        ../libuo/uo_sock/include)
+        ../libuo/uo_sock/include
+        "${OPENSSL_INCLUDE_DIR}")
 
 find_library(LIBUO_HASHTBL
     NAMES uo_hashtbl
@@ -55,7 +58,8 @@ target_link_libraries("${CMAKE_PROJECT_NAME}"
         "${LIBUO_HASHTBL}"
         "${LIBUO_QUEUE}"
         "${LIBUO_SOCK}"
-        "${LIBUO_ERR}")
+        "${LIBUO_ERR}"
+        "${OPENSSL_SSL_LIBRARY}")
 
 if(WIN32)
     target_link_libraries("${CMAKE_PROJECT_NAME}"
