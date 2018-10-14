@@ -37,9 +37,11 @@ void *handle_response_get_current_weather(
     uo_http_res *http_response,
     void *state) 
 {
-    if (!http_response) {
+    if (!http_response)
         return NULL;
-    }
+
+    if (http_response->status_code != 200 && http_response->status_code != 301)
+        return NULL;
 
     char *gml_pos = strstr(http_response->body, GML_POS_TAG);
 

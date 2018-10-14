@@ -2,6 +2,7 @@
 #include "fmi_client.h"
 #include "uo_queue.h"
 #include "uo_sock.h"
+#include "uo_err.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -136,16 +137,10 @@ int main(
 {
     fmiw_conf_t *fmiw_conf = fmiw_conf_create();
     if (!fmiw_conf)
-    {
-        printf("Error reading the configuration.\r\n");
-        return 1;
-    }
+        uo_err_exit("Error reading the configuration.");
 
     if (!uo_sock_init())
-    {
-        printf("Error initializing uo_sock.\r\n");
-        return 1;
-    }
+        uo_err_exit("Error initializing uo_sock.");
 
     fmi_client_configure(fmiw_conf->fmi_apikey);
 
@@ -159,10 +154,8 @@ int main(
         The socket is blocking dual-stack socket that will listen port that was set in configuration file. */
 	server_sockfd = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
 
-	if (server_sockfd == -1) {
-		printf("Unable to create socket! errno: %d\r\n", errno);
-		return 1;
-	} 
+	if (server_sockfd == -1)
+		uo_err_exit("Unable to create socket");
 	
 	{
 		int opt_IPV6_V6ONLY = false;
@@ -183,20 +176,16 @@ int main(
 			.sin6_addr = in6addr_any
 		};
 
-		if (bind(server_sockfd, (struct sockaddr *)&addr, sizeof addr) == -1) {
-			printf("Unable to bind to socket!\r\n");
-			return 1;
-		}
+		if (bind(server_sockfd, (struct sockaddr *)&addr, sizeof addr) == -1)
+			uo_err_exit("Unable to bind to socket!");
 
 		/*	Setup signal handling
 			
 			TODO: Consider using sigaction instead of signal */
 		signal(SIGINT, handle_signal);
 
-		if (listen(server_sockfd, SOMAXCONN) == -1) {
-			printf("Unable to listen on socket!\r\n");
-			return 1;
-		}
+		if (listen(server_sockfd, SOMAXCONN) == -1)
+			uo_err_exit("Unable to listen on socket!\r\n");
 
 		{
 			char addrp[INET6_ADDRSTRLEN];
