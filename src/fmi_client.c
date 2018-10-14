@@ -1,5 +1,6 @@
 #include "fmi_client.h"
 #include "uo_cb.h"
+#include "uo_err.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -41,38 +42,26 @@ void *handle_response_get_current_weather(
         return NULL;
 
     if (http_response->status_code != 200 && http_response->status_code != 301)
-        return NULL;
+        uo_err_goto(err_http_res_destroy, "Error receiving the weather data.");
 
     char *gml_pos = strstr(http_response->body, GML_POS_TAG);
-
-    if (!gml_pos) {
-        uo_http_res_destroy(http_response);
-        return NULL;
-    }
+    if (!gml_pos) 
+        uo_err_goto(err_http_res_destroy, "Error parsing the weather data.");
 
     char *gml_beginTime = strstr(http_response->body, GML_BEGINPOSITION_TAG);
-
-    if (!gml_beginTime) {
-        uo_http_res_destroy(http_response);
-        return NULL;
-    }
+    if (!gml_beginTime) 
+        uo_err_goto(err_http_res_destroy, "Error parsing the weather data.");
 
     char *gml_doubleOrNilReasonTupleList = strstr(http_response->body, GML_DOUBLEORNILLREASONTUPLELIST_TAG);
-
-    if (!gml_doubleOrNilReasonTupleList) {
-        uo_http_res_destroy(http_response);
-        return NULL;
-    }
+    if (!gml_doubleOrNilReasonTupleList) 
+        uo_err_goto(err_http_res_destroy, "Error parsing the weather data.");
 
     fmi_weather_t *weather = calloc(24, sizeof(fmi_weather_t));
 
     if (sscanf(gml_pos + STRLEN(GML_POS_TAG), "%lf %lf", 
         &weather->latitude, 
-        &weather->longitude) != 2) {
-        free(weather);
-        uo_http_res_destroy(http_response);
-        return NULL;
-    }
+        &weather->longitude) != 2) 
+        uo_err_goto(err_free_weather, "Error parsing the weather data.");
 
     if (sscanf(gml_beginTime + STRLEN(GML_BEGINPOSITION_TAG), "%d-%d-%dT%d:%d:%dZ", 
         &weather->utc.tm_year,
@@ -80,11 +69,8 @@ void *handle_response_get_current_weather(
         &weather->utc.tm_mday, 
         &weather->utc.tm_hour, 
         &weather->utc.tm_min,
-        &weather->utc.tm_sec) != 6) {
-        free(weather);
-        uo_http_res_destroy(http_response);
-        return NULL;
-    }
+        &weather->utc.tm_sec) != 6) 
+        uo_err_goto(err_free_weather, "Error parsing the weather data.");
 
     weather->utc.tm_year -= 1900;
     weather->utc.tm_mon -= 1;
@@ -104,6 +90,14 @@ void *handle_response_get_current_weather(
     uo_http_res_destroy(http_response);
 
     return weather;
+
+err_free_weather:
+    free(weather);
+
+err_http_res_destroy:
+    uo_http_res_destroy(http_response);
+
+    return NULL;
 }
 
 void fmi_client_configure(
@@ -115,8 +109,8 @@ void fmi_client_configure(
 
 fmi_client_t *fmi_client_create() 
 {
-    fmi_client_t *fmi_client = malloc(sizeof(fmi_client_t));
-    fmi_client->http_client = uo_httpc_create(FMI_HOSTNAME, STRLEN(FMI_HOSTNAME));
+    fmi_client_t *fmi_client = malloc(sizeof *fmi_client);
+    fmi_client->http_client = uo_httpc_create(FMI_HOSTNAME, STRLEN(FMI_HOSTNAME), 0);
     uo_httpc_set_header(fmi_client->http_client, HTTP_HEADER_ACCEPT, "application/xml", 15);
 	
     return fmi_client;

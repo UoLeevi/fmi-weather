@@ -39,9 +39,8 @@ void send_weather_data(
 
     int *client_sockfd = state;
 
-    if (!weather) {
-        send(*client_sockfd, error_msg, sizeof error_msg - 1, 0);
-    } else {
+    if (weather)
+    {
         char result[0x1000] = { 0 };
         char *p = result;
         fmi_weather_t *w = weather;
@@ -61,18 +60,21 @@ void send_weather_data(
             w[i].weather_symbol);
         }   
         send(*client_sockfd, result, strlen(result), 0);
+        free(weather);
     }
+    else
+        send(*client_sockfd, error_msg, sizeof error_msg - 1, 0); 
 
     send(*client_sockfd, closing_msg, sizeof closing_msg - 1, 0);
+    shutdown(*client_sockfd, SHUT_WR);
 
     char *nullbuf;
 
-    recv(*client_sockfd, nullbuf, 1, 0);
+    while(recv(*client_sockfd, nullbuf, 1, 0) > 0);
 
-    shutdown(*client_sockfd, SHUT_RDWR);
+    shutdown(*client_sockfd, SHUT_RD);
     close(*client_sockfd);
     free(state);
-    free(weather);
 }
 
 void *serve(
@@ -89,26 +91,18 @@ void *serve(
         int *client_sockfd = uo_queue_dequeue(conn_queue, true);
         
         if (send(*client_sockfd, ready_msg, sizeof ready_msg - 1, 0) == -1) 
-        {
-            close(*client_sockfd);
-            free(client_sockfd);
-            continue;
-        }
+            uo_err_goto(err_close, "Error sending the READY message.")
         
-        ssize_t len = 0;
+        ssize_t recv_len = 0;
         char *end = NULL;
         char *p = buf;
+        
         while (!end) 
         {
-            p += len = recv(*client_sockfd, p, sizeof buf - (p - buf), 0);
+            if ((recv_len = recv(*client_sockfd, p, sizeof buf - (p - buf), 0)) == -1)
+                uo_err_goto(err_close, "Error sending the READY message.")
 
-            if (len == -1)
-            {
-                close(*client_sockfd);
-                free(client_sockfd);
-                goto continue_outer;
-            }
-
+            p += recv_len;
             *p = '\0';
             end = strstr(buf, "\r\n");
         }
@@ -127,7 +121,11 @@ void *serve(
 
         fmi_client_get_current_weather(fmi_client, place, place_len, send_weather_data, client_sockfd);
 
-continue_outer:;
+        continue;
+
+err_close:
+        close(*client_sockfd);
+        free(client_sockfd);
     }
 }
 
@@ -195,14 +193,20 @@ int main(
 			printf("Listening on [%s]:%u.\r\n", addrp, portp);
 		}
 
-		while (!is_closing) {
+		while (!is_closing) 
+        {
 			/*	Accept connection
 
 				Client address can be later acquired with 
 				int getsockname(int sockfd, struct sockaddr *addrsocklen_t *" addrlen ); */
-			int *client_sockfd = malloc(sizeof(int));
-            *client_sockfd = accept(server_sockfd, NULL, NULL);
-            uo_queue_enqueue(conn_queue, client_sockfd, true);
+			int *client_sockfd = malloc(sizeof *client_sockfd);
+            if ((*client_sockfd = accept(server_sockfd, NULL, NULL)) != -1)
+                uo_queue_enqueue(conn_queue, client_sockfd, true);
+            else
+            {
+                uo_err("Error on accepting connection.");
+                free(client_sockfd);
+            }
 		}
 
         pthread_join(thrd, NULL);
