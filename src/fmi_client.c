@@ -110,7 +110,7 @@ void fmi_client_configure(
 fmi_client_t *fmi_client_create() 
 {
     fmi_client_t *fmi_client = malloc(sizeof *fmi_client);
-    fmi_client->http_client = uo_httpc_create(FMI_HOSTNAME, STRLEN(FMI_HOSTNAME), 0);
+    fmi_client->http_client = uo_httpc_create(FMI_HOSTNAME, STRLEN(FMI_HOSTNAME), UO_HTTPC_OPT_TLS);
     uo_httpc_set_header(fmi_client->http_client, HTTP_HEADER_ACCEPT, "application/xml", 15);
 	
     return fmi_client;

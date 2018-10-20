@@ -59,12 +59,14 @@ target_link_libraries("${CMAKE_PROJECT_NAME}"
         "${LIBUO_QUEUE}"
         "${LIBUO_SOCK}"
         "${LIBUO_ERR}"
-        "${OPENSSL_SSL_LIBRARY}")
+        "${OPENSSL_SSL_LIBRARY}"
+        "${OPENSSL_CRYPTO_LIBRARY}")
 
 if(WIN32)
     target_link_libraries("${CMAKE_PROJECT_NAME}"
         PUBLIC
-            ws2_32)
+            ws2_32
+            crypt32)
 endif()
 
 
