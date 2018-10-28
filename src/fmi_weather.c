@@ -44,7 +44,7 @@ static bool fmi_weather_set_apikey(
 
 static uo_tcpserv_res *fmi_weather_parse_current_weather_res(
     uo_http_res *http_response,
-    void *_) 
+    uo_cb *cb) 
 {
     if (!http_response)
         return NULL;
@@ -118,8 +118,7 @@ err_http_res_destroy:
 
 static void *fmi_weather_handle_cmd(
     uo_tcpserv_arg *cmd,
-    void *state,
-    void *(*send_res)(uo_tcpserv_res *, void *state))
+    uo_cb *uo_tcpserv_res_cb)
 {
     char *token = strtok(cmd->data, " ");
         
@@ -149,16 +148,13 @@ static void *fmi_weather_handle_cmd(
             uo_mem_write(p, place, place_len);
             uo_mem_write(p, starttime, STRLEN(starttime));
 
-            uo_cb *cb = uo_cb_create(UO_CB_OPT_DESTROY);
-            uo_cb_append(cb, (void *(*)(void *, void *))fmi_weather_parse_current_weather_res);
-            uo_cb_append(cb, (void *(*)(void *, void *))send_res);
+            uo_cb_prepend(uo_tcpserv_res_cb, (void *(*)(void *, uo_cb *))fmi_weather_parse_current_weather_res);
 
             uo_httpc_get(
                 fmi_client, 
                 path, 
                 path_len, 
-                (void *(*)(uo_http_res *, void *))uo_cb_as_func(cb, state), 
-                state);
+                uo_tcpserv_res_cb);
         }
     }
 }
