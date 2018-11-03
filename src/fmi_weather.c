@@ -163,7 +163,6 @@ int main(
     int argc, 
     char **argv)
 {
-    uo_sock_init();
     uo_cb_init(1);
     uo_httpc_init(1);
 
