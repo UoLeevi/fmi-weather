@@ -1,4 +1,5 @@
-#include "uo_tcpserv.h"
+#include "uo_conf.h"
+#include "uo_ipcs.h"
 #include "uo_httpc.h"
 #include "uo_cb.h"
 #include "uo_err.h"
@@ -30,19 +31,7 @@ static char FMI_API_PATH[] = "/fmi-apikey/" FMI_APIKEY "/wfs";
 
 static uo_httpc *fmi_client;
 
-static bool fmi_weather_set_apikey(
-    uo_tcpserv_arg key)
-{
-    if (key.data_len != STRLEN(FMI_APIKEY))
-        uo_err_return(false, "fmi-apikey was in incorrect format.")
-    
-    char *apikey = strstr(FMI_API_PATH, FMI_APIKEY);
-    memcpy(apikey, key.data, key.data_len);
-
-    return true;
-}
-
-static uo_tcpserv_res *fmi_weather_parse_current_weather_res(
+static uo_ipcmsg *fmi_weather_parse_current_weather_res(
     uo_http_res *http_response,
     uo_cb *cb) 
 {
@@ -67,10 +56,10 @@ static uo_tcpserv_res *fmi_weather_parse_current_weather_res(
         uo_err_goto(err_http_res_destroy, "Error parsing the weather data.");
     gml_doubleOrNilReasonTupleList += STRLEN(GML_DOUBLEORNILLREASONTUPLELIST_TAG);
 
-    uo_tcpserv_res *res = malloc(sizeof *res);
-    res->data = malloc(0x1000);
+    uo_ipcmsg *msg = malloc(sizeof *msg);
+    msg->data = malloc(0x1000);
 
-    char *p = res->data;
+    char *p = msg->data;
 
     double latitude;
     double longitude;
@@ -78,7 +67,7 @@ static uo_tcpserv_res *fmi_weather_parse_current_weather_res(
     if (sscanf(gml_pos, "%lf %lf", &latitude, &longitude) != 2) 
         uo_err_goto(err_free_res, "Error parsing the weather data.");
 
-    p += snprintf(p, 0x1000 - (p - res->data), "%lf,%lf,", latitude, longitude);
+    p += snprintf(p, 0x1000 - (p - msg->data), "%lf,%lf,", latitude, longitude);
 
     char *gml_beginTime_end = strchr(gml_beginTime, 'Z');
     if (!gml_beginTime_end)
@@ -95,20 +84,21 @@ static uo_tcpserv_res *fmi_weather_parse_current_weather_res(
     for (int i = 0; i < 24; ++i)
     {
         sscanf(token, " %lf %d", &celsius, &weather_symbol);
-        p += snprintf(p, 0x1000 - (p - res->data), "%.1lf,%d" "\r\n", celsius, weather_symbol);
+        p += snprintf(p, 0x1000 - (p - msg->data), "%.1lf,%d" "\r\n", celsius, weather_symbol);
         token = strtok(NULL, "\r\n\t\0");
     }
 
     uo_http_res_destroy(http_response);
 
-    res->data_len = p - res->data;
+    msg->data_len = p - msg->data;
     *p = '\0'; 
-    res->data = realloc(res->data, res->data_len + 1);
+    msg->data = realloc(msg->data, msg->data_len + 1);
+    msg->should_free = true;
 
-    return res;
+    return msg;
 
 err_free_res:
-    free(res->data);
+    free(msg->data);
 
 err_http_res_destroy:
     uo_http_res_destroy(http_response);
@@ -117,8 +107,8 @@ err_http_res_destroy:
 }
 
 static void *fmi_weather_handle_cmd(
-    uo_tcpserv_arg *cmd,
-    uo_cb *uo_tcpserv_res_cb)
+    uo_ipcmsg *cmd,
+    uo_cb *uo_ipcmsg_cb)
 {
     char *token = strtok(cmd->data, " ");
         
@@ -148,13 +138,13 @@ static void *fmi_weather_handle_cmd(
             uo_mem_write(p, place, place_len);
             uo_mem_write(p, starttime, STRLEN(starttime));
 
-            uo_cb_prepend(uo_tcpserv_res_cb, (void *(*)(void *, uo_cb *))fmi_weather_parse_current_weather_res);
+            uo_cb_prepend(uo_ipcmsg_cb, (void *(*)(void *, uo_cb *))fmi_weather_parse_current_weather_res);
 
             uo_httpc_get(
                 fmi_client, 
                 path, 
                 path_len, 
-                uo_tcpserv_res_cb);
+                uo_ipcmsg_cb);
         }
     }
 }
@@ -163,13 +153,24 @@ int main(
     int argc, 
     char **argv)
 {
-    uo_cb_init(1);
+    uo_ipc_init();
     uo_httpc_init(1);
+
+    uo_conf *conf = uo_conf_create("fmi_weather.conf");
+
+    char *apikey = uo_conf_get(conf, "fmi-apikey");
+    memcpy(strstr(FMI_API_PATH, FMI_APIKEY), apikey, strlen(apikey));
 
     fmi_client = uo_httpc_create(FMI_HOSTNAME, STRLEN(FMI_HOSTNAME), UO_HTTPC_OPT_TLS);
     uo_httpc_set_header(fmi_client, HTTP_HEADER_ACCEPT, "application/xml", 15);
 
-    uo_tcpserv_start(fmi_weather_set_apikey, fmi_weather_handle_cmd);
+    char *port = uo_conf_get(conf, "port");
+    uo_ipcs *ipcs = uo_ipcs_create(port, strlen(port), fmi_weather_handle_cmd);
+
+    printf("Press 'q' to quit...");
+    while(getchar() != 'q');
+
+    ipcs->is_closing = true;
 
     return 0;
 }
