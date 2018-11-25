@@ -165,7 +165,7 @@ int main(
     uo_httpc_set_header(fmi_client, HTTP_HEADER_ACCEPT, "application/xml", 15);
 
     char *port = uo_conf_get(conf, "port");
-    uo_ipcs *ipcs = uo_ipcs_create(port, strlen(port), fmi_weather_handle_cmd);
+    uo_ipcs *ipcs = uo_ipcs_create(port, fmi_weather_handle_cmd);
 
     printf("Press 'q' to quit...");
     while(getchar() != 'q');
