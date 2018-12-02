@@ -27,11 +27,13 @@
 #define GML_BEGINPOSITION_TAG "<gml:beginPosition>"
 #define GML_DOUBLEORNILLREASONTUPLELIST_TAG "<gml:doubleOrNilReasonTupleList>"
 
+#define FMI_MSG_BUF_LEN 0x1000
+
 static char FMI_API_PATH[] = "/fmi-apikey/" FMI_APIKEY "/wfs";
 
 static uo_httpc *fmi_client;
 
-static uo_ipcmsg *fmi_weather_parse_current_weather_res(
+static uo_ipcmsg fmi_weather_parse_current_weather_res(
     uo_http_res *http_response,
     uo_cb *cb) 
 {
@@ -56,10 +58,9 @@ static uo_ipcmsg *fmi_weather_parse_current_weather_res(
         uo_err_goto(err_http_res_destroy, "Error parsing the weather data.");
     gml_doubleOrNilReasonTupleList += STRLEN(GML_DOUBLEORNILLREASONTUPLELIST_TAG);
 
-    uo_ipcmsg *msg = malloc(sizeof *msg);
-    msg->data = malloc(0x1000);
-
-    char *p = msg->data;
+    uo_ipcmsg ipcmsg = malloc(FMI_MSG_BUF_LEN);
+    char *payload = uo_ipcmsg_get_payload(ipcmsg);
+    char *p = payload;
 
     double latitude;
     double longitude;
@@ -67,7 +68,7 @@ static uo_ipcmsg *fmi_weather_parse_current_weather_res(
     if (sscanf(gml_pos, "%lf %lf", &latitude, &longitude) != 2) 
         uo_err_goto(err_free_res, "Error parsing the weather data.");
 
-    p += snprintf(p, 0x1000 - (p - msg->data), "%lf,%lf,", latitude, longitude);
+    p += snprintf(p, FMI_MSG_BUF_LEN - (p - ipcmsg), "%lf,%lf,", latitude, longitude);
 
     char *gml_beginTime_end = strchr(gml_beginTime, 'Z');
     if (!gml_beginTime_end)
@@ -84,21 +85,22 @@ static uo_ipcmsg *fmi_weather_parse_current_weather_res(
     for (int i = 0; i < 24; ++i)
     {
         sscanf(token, " %lf %d", &celsius, &weather_symbol);
-        p += snprintf(p, 0x1000 - (p - msg->data), "%.1lf,%d" "\r\n", celsius, weather_symbol);
+        p += snprintf(p, FMI_MSG_BUF_LEN - (p - ipcmsg), "%.1lf,%d" "\r\n", celsius, weather_symbol);
         token = strtok(NULL, "\r\n\t\0");
     }
 
     uo_http_res_destroy(http_response);
 
-    msg->data_len = p - msg->data;
-    *p = '\0'; 
-    msg->data = realloc(msg->data, msg->data_len + 1);
-    msg->should_free = true;
+    uint32_t payload_len = p - payload;
 
-    return msg;
+    uo_ipcmsg_set_payload_len(ipcmsg, payload_len);
+    *p = '\0'; 
+    ipcmsg = realloc(ipcmsg, sizeof(uint32_t) + payload_len + 1);
+
+    return ipcmsg;
 
 err_free_res:
-    free(msg->data);
+    free(ipcmsg);
 
 err_http_res_destroy:
     uo_http_res_destroy(http_response);
@@ -106,18 +108,21 @@ err_http_res_destroy:
     return NULL;
 }
 
-static void *fmi_weather_handle_cmd(
-    uo_ipcmsg *cmd,
+static void *fmi_weather_handle_msg(
+    uo_ipcmsg ipcmsg,
     uo_cb *uo_ipcmsg_cb)
 {
-    char *token = strtok(cmd->data, " ");
+    char *payload = uo_ipcmsg_get_payload(ipcmsg);
+    uint32_t payload_len = uo_ipcmsg_get_payload_len(ipcmsg);
+
+    char *token = strtok(payload, " ");
         
     switch (token[0])
     {
         case 'W':
         {
             char *place = strtok(NULL, "\0");
-            const size_t place_len = cmd->data + cmd->data_len - place;
+            const size_t place_len = payload + payload_len - place;
 
             char starttime[32];
 
@@ -165,7 +170,7 @@ int main(
     uo_httpc_set_header(fmi_client, HTTP_HEADER_ACCEPT, "application/xml", 15);
 
     char *port = uo_conf_get(conf, "port");
-    uo_ipcs *ipcs = uo_ipcs_create(port, fmi_weather_handle_cmd);
+    uo_ipcs *ipcs = uo_ipcs_create(port, fmi_weather_handle_msg);
 
     printf("Press 'q' to quit...");
     while(getchar() != 'q');
